@@ -1,5 +1,6 @@
 package com.example.httpdemo;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -7,6 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -31,7 +33,7 @@ public class HttpUtils {
 
 	private static final int LOAD_DATA_SUCCES = 1;
 	private static final int LOAD_DATA_ERROR = 2;
-	private static final String STARTBOUNDARY = "---------------------------7de11e16190796";
+	private static final String STARTBOUNDARY = "----WebKitFormBoundaryiAAgDoILaQMj1Ee2";
 	private static final String BOUNDARY = "--" + STARTBOUNDARY + "\r\n";
 	private static final String ENDBOUNDARY = "\r\n--" + STARTBOUNDARY
 			+ "--\r\n";
@@ -198,42 +200,46 @@ public class HttpUtils {
 			@Override
 			public void run() {
 				try {
-					Log.i("kevin", "start");
 					URL url = new URL(path);
 					HttpURLConnection conn = (HttpURLConnection) url
 							.openConnection();
-					conn.setDoInput(true);
-					conn.setDoOutput(true);
-					conn.setUseCaches(false);
+
 					conn.setRequestMethod("POST");
-					conn.addRequestProperty("connection", "Keep-Alive");
-					conn.addRequestProperty("user-agent",
-							"Mozilla/4.0 (compatible; MSIE 6.0; Windows NT 5.1; SV1)");
-					conn.addRequestProperty("Charsert", "UTF-8");
-					conn.addRequestProperty("Content-Type",
-							"multipart/form-data; boundary=" + BOUNDARY);
+					conn.setRequestProperty("Connection", "keep-alive");
+					conn.setRequestProperty("Cache-Control", "max-age=0");
+					conn.setRequestProperty("Accept",
+							"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8");
+					conn.setRequestProperty(
+							"user-agent",
+							"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari");
+					conn.setRequestProperty("Accept-Encoding",
+							"gzip,deflate,sdch");
+					conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.8");
+					conn.setRequestProperty("Charsert", "UTF-8");
+					conn.setRequestProperty("Content-Type",
+							"multipart/form-data; boundary=" + STARTBOUNDARY);
 
 					OutputStream out = new DataOutputStream(conn
 							.getOutputStream());
 					StringBuffer sb = null;
-					Log.i("kevin", "start1");
 					for (int i = 0; i < fileList.size(); i++) {
-						Log.i("kevin", "start2");
+						File file = new File(fileList.get(i));
 						sb = new StringBuffer();
 						sb.append(BOUNDARY);
 						sb.append("Content-Disposition: form-data; name=\"file"
-								+ i + "\"; filename=\"" + fileList.get(i)
-								+ "+\"\r\n");
+								+ i + "\"; filename=\"" + file.getName()
+								+ "\"\r\n");
 						sb.append("Content-Type: application/octet-stream\r\n\r\n");
 						out.write(sb.toString().getBytes());
+
 						DataInputStream inputStream = new DataInputStream(
 								new FileInputStream(new File(fileList.get(i))));
+
 						int bytes = 0;
 						byte buffer[] = new byte[1024];
 						while ((bytes = inputStream.read(buffer)) != -1) {
 
 							out.write(buffer, 0, bytes);
-							Log.i("kevin", "start3");
 						}
 						out.write("\r\n".getBytes());
 						inputStream.close();
@@ -243,7 +249,14 @@ public class HttpUtils {
 					out.flush();
 					out.close();
 
-					Log.i("kevin", "end");
+					// 定义BufferedReader输入流来读取URL的响应
+					// 此处必须得到服务器端的输入流否则上传文件不成功（当php作服务器端语言的时候是这样，其它语言未试)
+					BufferedReader reader = new BufferedReader(
+							new InputStreamReader(conn.getInputStream()));
+					String line = null;
+					while ((line = reader.readLine()) != null) {
+						System.out.println(line);
+					}
 
 				} catch (MalformedURLException e) {
 					e.printStackTrace();
