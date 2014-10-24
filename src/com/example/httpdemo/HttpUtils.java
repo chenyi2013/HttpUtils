@@ -10,15 +10,33 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpStatus;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.entity.ContentType;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.util.EntityUtils;
+
 import android.os.Handler;
 import android.os.Message;
-import android.util.Log;
 
 /**
  * 本类主要封装了从网络上加载数据和上传文件到网络服务器等操作
@@ -122,6 +140,172 @@ public class HttpUtils {
 		}).start();
 	}
 
+	public static byte[] useHttpClientGetData(int method,
+			HashMap<String, String> propertys, byte[] body, String path) {
+
+		HttpClient httpClient = new DefaultHttpClient();
+		HttpResponse httpResponse = null;
+
+		switch (method) {
+		case POST:
+			HttpPost httpPost = new HttpPost(path);
+			for (String headerName : propertys.keySet()) {
+				httpPost.addHeader(headerName, propertys.get(headerName));
+			}
+
+			if (body != null) {
+				ByteArrayEntity entity = new ByteArrayEntity(body);
+				httpPost.setEntity(entity);
+			}
+
+			try {
+				httpResponse = httpClient.execute(httpPost);
+			} catch (ClientProtocolException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			break;
+
+		case GET:
+			HttpGet httpGet = new HttpGet(path);
+			for (String headerName : propertys.keySet()) {
+				httpGet.addHeader(headerName, propertys.get(headerName));
+			}
+
+			try {
+				httpResponse = httpClient.execute(httpGet);
+			} catch (ClientProtocolException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			break;
+
+		default:
+			throw new IllegalStateException("Unknown method type.");
+
+		}
+
+		if (httpResponse.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
+
+			try {
+				HttpEntity entity = httpResponse.getEntity();
+				if (entity != null) {
+					return EntityUtils.toByteArray(httpResponse.getEntity());
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+
+		return null;
+	}
+
+	/**
+	 * 向服务器端传递表单数据并返回结果
+	 * 
+	 * @param method
+	 * @param header
+	 * @param forms
+	 * @param path
+	 * @return
+	 */
+	public static byte[] getData(int method, HashMap<String, String> header,
+			HashMap<String, String> forms, String path) {
+
+		StringBuilder sb = new StringBuilder();
+		if (forms != null) {
+
+			for (String name : forms.keySet()) {
+
+				sb.append(name);
+				sb.append("=");
+				sb.append(forms.get(name));
+				sb.append("&");
+			}
+			sb.deleteCharAt(sb.length() - 1);
+
+		}
+
+		return getData(method, header, sb.toString().getBytes(), path);
+	}
+
+	public static byte[] useHttpClientGetData(int method,
+			HashMap<String, String> propertys, HashMap<String, String> forms,
+			String path) {
+
+		HttpClient httpClient = new DefaultHttpClient();
+		HttpResponse httpResponse = null;
+
+		switch (method) {
+		case POST:
+
+			HttpPost post = new HttpPost(path);
+			if (propertys != null) {
+				for (String headerName : propertys.keySet()) {
+					post.setHeader(headerName, propertys.get(headerName));
+				}
+			}
+
+			if (forms != null) {
+
+				ArrayList<NameValuePair> pairs = new ArrayList<NameValuePair>();
+				for (String name : forms.keySet()) {
+
+					pairs.add(new BasicNameValuePair(name, forms.get(name)));
+				}
+				try {
+					UrlEncodedFormEntity encodedFormEntity = new UrlEncodedFormEntity(
+							pairs);
+					post.setEntity(encodedFormEntity);
+					httpResponse = httpClient.execute(post);
+				} catch (UnsupportedEncodingException e) {
+					e.printStackTrace();
+				} catch (ClientProtocolException e) {
+					e.printStackTrace();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			break;
+
+		case GET:
+			HttpGet get = new HttpGet(path);
+			if (propertys != null) {
+				for (String headerName : propertys.keySet()) {
+					get.setHeader(headerName, propertys.get(headerName));
+				}
+			}
+
+			try {
+				httpResponse = httpClient.execute(get);
+			} catch (ClientProtocolException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			break;
+
+		default:
+			throw new IllegalStateException("Unknown method type.");
+
+		}
+
+		if (httpResponse.getStatusLine().getStatusCode() == HttpStatus.SC_OK) {
+			try {
+				return EntityUtils.toByteArray(httpResponse.getEntity());
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		return null;
+
+	}
+
 	public static byte[] getData(int method, HashMap<String, String> propertys,
 			byte[] body, String path) {
 
@@ -189,10 +373,64 @@ public class HttpUtils {
 	/**
 	 * 上传文件
 	 * 
+	 * @param url
+	 * @param files
+	 */
+	public static void useHttpMimeUploadFile(final String url,
+			final ArrayList<String> files) {
+
+		new Thread(new Runnable() {
+
+			@Override
+			public void run() {
+
+				HttpClient httpClient = new DefaultHttpClient();
+				HttpPost httpPost = new HttpPost(url);
+				MultipartEntityBuilder build = MultipartEntityBuilder.create();
+
+				for (String file : files) {
+
+					FileBody bin = new FileBody(new File(file));
+					StringBody comment = new StringBody("commit",
+							ContentType.TEXT_PLAIN);
+					build.addPart(file, bin);
+					build.addPart("comment", comment);
+
+				}
+
+				HttpEntity reqEntity = build.build();
+				httpPost.setEntity(reqEntity);
+
+				try {
+					HttpResponse httpResponse = httpClient.execute(httpPost);
+					if (httpResponse.getStatusLine().getStatusCode() == 200) {
+						HttpEntity resEntity = httpResponse.getEntity();
+						System.out.println(EntityUtils.toString(resEntity));
+					} else {
+						System.out.println("connection error!!!!");
+					}
+
+				} catch (ClientProtocolException e) {
+
+					e.printStackTrace();
+				} catch (IOException e) {
+
+					e.printStackTrace();
+				} finally {
+					httpClient.getConnectionManager().shutdown();
+				}
+			}
+		}).start();
+
+	}
+
+	/**
+	 * 上传文件
+	 * 
 	 * @param path
 	 * @param fileList
 	 */
-	public static void uploadFile(final String path,
+	public static void useHttpURLConnectionUploadFile(final String path,
 			final ArrayList<String> fileList) {
 
 		new Thread(new Runnable() {
